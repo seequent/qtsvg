@@ -955,8 +955,8 @@ bool QSvgPaintEngine::end()
 
     for (auto it : clip_path_to_id)
     {
-        std::string path = it->first;
-        int path_id = it->second;
+        std::string path = it.first;
+        int path_id = it.second;
 
         *d->stream << "<clipPath id=\"clip" << path_id << "\">" << '\n';
         *d->stream << "\t" << path.c_str() << " \"/> \n";
