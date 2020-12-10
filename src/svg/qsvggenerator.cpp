@@ -953,7 +953,7 @@ bool QSvgPaintEngine::end()
 
     d->stream->setString(&d->defs);
 
-    for (auto it = clip_path_to_id.begin(); it != clip_path_to_id.end(); it++)
+    for (auto it : clip_path_to_id)
     {
         std::string path = it->first;
         int path_id = it->second;
