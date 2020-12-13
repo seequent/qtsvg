@@ -78,7 +78,7 @@ static void translate_dashPattern(const QVector<qreal> &pattern, qreal width, QS
 
     // Note that SVG operates in absolute lengths, whereas Qt uses a length/width ratio.
     for (qreal entry : pattern) {
-        *pattern_string += QString::fromLatin1("%1,").arg(entry * width);
+        *pattern_string += QString::fromLatin1("%1,").arg(entry);// * width);
     }
 
     pattern_string->chop(1);
@@ -163,7 +163,9 @@ class QSvgPaintEngine : public QPaintEngine
 
 private:
     int clip_counter = 0;
-    std::map<std::string, int> clip_path_to_id;
+    std::map<QString, int> clip_path_to_id;
+    QString createPath(const QPainterPath &p);
+
 public:
 
     QSvgPaintEngine()
@@ -943,16 +945,6 @@ bool QSvgPaintEngine::end()
 
     d->stream->setString(&d->defs);
 
-    for (auto it : clip_path_to_id)
-    {
-        std::string path = it.first;
-        int path_id = it.second;
-
-        *d->stream << "<clipPath id=\"clip" << path_id << "\">" << '\n';
-        *d->stream << "\t" << path.c_str() << " \"/> \n";
-        *d->stream << "</clipPath>" << '\n';
-    }
-
     *d->stream << "</defs>\n";
 
     d->stream->setDevice(d->outputDevice);
@@ -1019,21 +1011,22 @@ void QSvgPaintEngine::updateState(const QPaintEngineState &state)
     
     QPainter* p = painter();
     if (p->hasClipping()) {
-        std::string clip_path;
-        QPainterPath path = p->clipPathF();
+        QPainterPath painter_path = p->clipPathF();
 
-        if (path.elementCount() > 0) {
-            QPainterPath::Element starting_point = path.elementAt(0);
-            clip_path.append("<path d=\"M " + std::to_string(starting_point.x) + ", " + std::to_string(starting_point.y) + " ");
+        if (painter_path.elementCount() > 0) {
+            QString clip_path = createPath(painter_path);
 
-            for (int i = 1; i < path.elementCount(); i++) {
-                QPainterPath::Element element = path.elementAt(i);
-                std::string point = "L" + std::to_string(element.x) + ", " + std::to_string(element.y) + " ";
-                clip_path.append(point);
-            }
-
-            if (0 == clip_path_to_id.count(clip_path)) {
+            bool path_does_not_exist = 0 == clip_path_to_id.count(clip_path);
+            if (path_does_not_exist) {
                 clip_path_to_id[clip_path] = clip_counter++;
+                
+                d->stream->setString(&d->defs);
+
+                *d->stream << "<clipPath id=\"clip" << clip_path_to_id[clip_path] << "\">" << '\n';
+                *d->stream << '\t' << clip_path;
+                *d->stream << "</clipPath>" << '\n';
+
+                d->stream->setString(&d->body);
             }
 
             *d->stream << "<g clip-path=\"url(#clip" << clip_path_to_id[clip_path] << ")\" ";
@@ -1096,27 +1089,27 @@ void QSvgPaintEngine::drawEllipse(const QRectF &r)
     *d->stream << "\"/>" << endl;
 }
 
-void QSvgPaintEngine::drawPath(const QPainterPath &p)
+QString QSvgPaintEngine::createPath(const QPainterPath &p)
 {
-    Q_D(QSvgPaintEngine);
+    QTextStream path;
+    QString string;
+    path.setString(&string);
 
-    *d->stream << "<path vector-effect=\""
-               << (state->pen().isCosmetic() ? "non-scaling-stroke" : "none")
-               << "\" fill-rule=\""
-               << (p.fillRule() == Qt::OddEvenFill ? "evenodd" : "nonzero")
-               << "\" d=\"";
+    path << "<path vector-effect=\""
+               << (state->pen().isCosmetic() ? "non-scaling-stroke" : "none") << "\" fill-rule=\""
+               << (p.fillRule() == Qt::OddEvenFill ? "evenodd" : "nonzero") << "\" d=\"";
 
-    for (int i=0; i<p.elementCount(); ++i) {
+    for (int i = 0; i < p.elementCount(); ++i) {
         const QPainterPath::Element &e = p.elementAt(i);
         switch (e.type) {
         case QPainterPath::MoveToElement:
-            *d->stream << 'M' << e.x << ',' << e.y;
+            path << 'M' << e.x << ',' << e.y;
             break;
         case QPainterPath::LineToElement:
-            *d->stream << 'L' << e.x << ',' << e.y;
+            path<< 'L' << e.x << ',' << e.y;
             break;
         case QPainterPath::CurveToElement:
-            *d->stream << 'C' << e.x << ',' << e.y;
+            path << 'C' << e.x << ',' << e.y;
             ++i;
             while (i < p.elementCount()) {
                 const QPainterPath::Element &e = p.elementAt(i);
@@ -1124,8 +1117,8 @@ void QSvgPaintEngine::drawPath(const QPainterPath &p)
                     --i;
                     break;
                 } else
-                    *d->stream << ' ';
-                *d->stream << e.x << ',' << e.y;
+                    path << ' ';
+                path << e.x << ',' << e.y;
                 ++i;
             }
             break;
@@ -1133,12 +1126,22 @@ void QSvgPaintEngine::drawPath(const QPainterPath &p)
             break;
         }
         if (i != p.elementCount() - 1) {
-            *d->stream << ' ';
+            path << ' ';
         }
     }
 
-    *d->stream << "\"/>" << endl;
+    path << "\"/>" << endl;
+    return path.readAll();
 }
+
+void QSvgPaintEngine::drawPath(const QPainterPath &p)
+{
+    Q_D(QSvgPaintEngine);
+
+    *d->stream << createPath(p);
+}
+
+
 
 void QSvgPaintEngine::drawPolygon(const QPointF *points, int pointCount,
                                   PolygonDrawMode mode)
