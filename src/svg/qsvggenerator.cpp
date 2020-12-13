@@ -1091,11 +1091,12 @@ void QSvgPaintEngine::drawEllipse(const QRectF &r)
 
 QString QSvgPaintEngine::createPath(const QPainterPath &p)
 {
-    QTextStream path;
-    QString string;
-    path.setString(&string);
+    QTextStream path_stream;
+    QString path;
 
-    path << "<path vector-effect=\""
+    path_stream.setString(&path);
+
+    path_stream << "<path vector-effect=\""
                << (state->pen().isCosmetic() ? "non-scaling-stroke" : "none") << "\" fill-rule=\""
                << (p.fillRule() == Qt::OddEvenFill ? "evenodd" : "nonzero") << "\" d=\"";
 
@@ -1103,13 +1104,13 @@ QString QSvgPaintEngine::createPath(const QPainterPath &p)
         const QPainterPath::Element &e = p.elementAt(i);
         switch (e.type) {
         case QPainterPath::MoveToElement:
-            path << 'M' << e.x << ',' << e.y;
+            path_stream << 'M' << e.x << ',' << e.y;
             break;
         case QPainterPath::LineToElement:
-            path<< 'L' << e.x << ',' << e.y;
+            path_stream << 'L' << e.x << ',' << e.y;
             break;
         case QPainterPath::CurveToElement:
-            path << 'C' << e.x << ',' << e.y;
+            path_stream << 'C' << e.x << ',' << e.y;
             ++i;
             while (i < p.elementCount()) {
                 const QPainterPath::Element &e = p.elementAt(i);
@@ -1117,8 +1118,8 @@ QString QSvgPaintEngine::createPath(const QPainterPath &p)
                     --i;
                     break;
                 } else
-                    path << ' ';
-                path << e.x << ',' << e.y;
+                    path_stream << ' ';
+                path_stream << e.x << ',' << e.y;
                 ++i;
             }
             break;
@@ -1126,12 +1127,12 @@ QString QSvgPaintEngine::createPath(const QPainterPath &p)
             break;
         }
         if (i != p.elementCount() - 1) {
-            path << ' ';
+            path_stream << ' ';
         }
     }
 
-    path << "\"/>" << endl;
-    return path.readAll();
+    path_stream << "\"/>" << endl;
+    return path;
 }
 
 void QSvgPaintEngine::drawPath(const QPainterPath &p)
