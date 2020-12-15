@@ -77,9 +77,8 @@ static void translate_dashPattern(const QVector<qreal> &pattern, qreal width, QS
     Q_ASSERT(pattern_string);
 
     // Note that SVG operates in absolute lengths, whereas Qt uses a length/width ratio.
-    for (qreal entry : pattern) {
+    for (qreal entry : pattern)
         *pattern_string += QString::fromLatin1("%1,").arg(entry * width);
-    }
 
     pattern_string->chop(1);
 }
