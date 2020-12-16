@@ -394,7 +394,7 @@ public:
         case Qt::CustomDashLine: {
             QString color, colorOpacity, dashPattern, dashOffset;
 
-            qreal penWidth = spen.widthF() == 0 ? qreal(1) : spen.widthF();
+            qreal penWidth = spen.widthF() == 0.0 ? qreal(1) : spen.widthF();
 
             translate_color(spen.color(), &color, &colorOpacity);
             translate_dashPattern(spen.dashPattern(), penWidth, &dashPattern);
