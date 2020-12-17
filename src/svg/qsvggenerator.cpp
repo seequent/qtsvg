@@ -1007,7 +1007,7 @@ void QSvgPaintEngine::updateState(const QPaintEngineState &state)
     // close old state and start a new one...
     if (d->afterFirstUpdate)
         *d->stream << "</g>\n\n";
-    
+
     *d->stream << "<g ";
 
     QPainter* p = painter();
@@ -1023,9 +1023,9 @@ void QSvgPaintEngine::updateState(const QPaintEngineState &state)
                 
                 d->stream->setString(&d->defs);
 
-                *d->stream << "<clipPath id=\"clip" << clip_path_to_id[clip_path] << "\">" << '\n';
+                *d->stream << "<clipPath id=\"clip" << clip_path_to_id[clip_path] << "\">" << endl;
                 *d->stream << '\t' << clip_path;
-                *d->stream << "</clipPath>" << '\n';
+                *d->stream << "</clipPath>" << endl;
 
                 d->stream->setString(&d->body);
             }
