@@ -1096,8 +1096,10 @@ QString QSvgPaintEngine::createPath(const QPainterPath &p)
     path_stream.setString(&path);
 
     path_stream << "<path vector-effect=\""
-               << (state->pen().isCosmetic() ? "non-scaling-stroke" : "none") << "\" fill-rule=\""
-               << (p.fillRule() == Qt::OddEvenFill ? "evenodd" : "nonzero") << "\" d=\"";
+                << (state->pen().isCosmetic() ? "non-scaling-stroke" : "none") 
+                << "\" fill-rule=\""
+                << (p.fillRule() == Qt::OddEvenFill ? "evenodd" : "nonzero") 
+                << "\" d=\"";
 
     for (int i = 0; i < p.elementCount(); ++i) {
         const QPainterPath::Element &e = p.elementAt(i);
