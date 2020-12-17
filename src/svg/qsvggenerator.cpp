@@ -1008,6 +1008,8 @@ void QSvgPaintEngine::updateState(const QPaintEngineState &state)
     if (d->afterFirstUpdate)
         *d->stream << "</g>\n\n";
     
+    *d->stream << "<g ";
+
     QPainter* p = painter();
     if (p->hasClipping()) {
         QPainterPath painter_path = p->clipPathF();
@@ -1028,14 +1030,8 @@ void QSvgPaintEngine::updateState(const QPaintEngineState &state)
                 d->stream->setString(&d->body);
             }
 
-            *d->stream << "<g clip-path=\"url(#clip" << clip_path_to_id[clip_path] << ")\" ";
+            *d->stream << "clip-path=\"url(#clip" << clip_path_to_id[clip_path] << ")\" ";
         }
-        else {
-            *d->stream << "<g ";
-        }
-    }
-    else {
-        *d->stream << "<g ";
     }
 
 
