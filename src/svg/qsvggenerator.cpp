@@ -1139,7 +1139,6 @@ void QSvgPaintEngine::drawPath(const QPainterPath &p)
     *d->stream << createPath(p);
 }
 
-
 void QSvgPaintEngine::drawPolygon(const QPointF *points, int pointCount,
                                   PolygonDrawMode mode)
 {
