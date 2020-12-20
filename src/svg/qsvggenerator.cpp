@@ -1021,13 +1021,12 @@ void QSvgPaintEngine::updateState(const QPaintEngineState &state)
             if (path_does_not_exist) {
                 clip_path_to_id[clip_path] = clip_counter++;
                 
-                d->stream->setString(&d->defs);
+                QTextStream str(&d_func()->defs, QIODevice::Append);
 
-                *d->stream << "<clipPath id=\"clip" << clip_path_to_id[clip_path] << "\">" << endl;
-                *d->stream << '\t' << clip_path;
-                *d->stream << "</clipPath>" << endl;
+                str << "<clipPath id=\"clip" << clip_path_to_id[clip_path] << "\">" << endl;
+                str << '\t' << clip_path;
+                str << "</clipPath>" << endl;
 
-                d->stream->setString(&d->body);
             }
 
             *d->stream << "clip-path=\"url(#clip" << clip_path_to_id[clip_path] << ")\" ";
