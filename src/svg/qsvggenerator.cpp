@@ -1026,7 +1026,6 @@ void QSvgPaintEngine::updateState(const QPaintEngineState &state)
                 str << "<clipPath id=\"clip" << clip_path_to_id[clip_path] << "\">" << endl;
                 str << '\t' << clip_path;
                 str << "</clipPath>" << endl;
-
             }
 
             *d->stream << "clip-path=\"url(#clip" << clip_path_to_id[clip_path] << ")\" ";
