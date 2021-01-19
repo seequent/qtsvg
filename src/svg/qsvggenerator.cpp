@@ -161,7 +161,7 @@ class QSvgPaintEngine : public QPaintEngine
     Q_DECLARE_PRIVATE(QSvgPaintEngine)
 
 private:
-    int clip_counter = 0;
+    unsigned int clip_counter = 0;
     std::map<QString, int> clip_path_to_id;
     QString createPath(const QPainterPath &p);
 
