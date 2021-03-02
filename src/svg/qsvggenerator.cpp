@@ -1165,14 +1165,14 @@ void QSvgPaintEngine::updateState(const QPaintEngineState &state)
         d->currentBody.clear();  // we are now discarding the old state completely
 
         // close old state and start a new one...
-        d->stream->setString(d->currentBody, QIODevice::Append);
+        d->stream->setString(&d->currentBody, QIODevice::Append);
         if (afterFirstUpdate)
             *d->stream << "</g>\n\n";
         *d->stream << newGState;
         d->previousGState = newGState;
         d->gSize = d->currentBody.size(); 
     } else {
-        d->stream->setString(d->currentBody, QIODevice::Append);
+        d->stream->setString(&d->currentBody, QIODevice::Append);
     }
 }
 
