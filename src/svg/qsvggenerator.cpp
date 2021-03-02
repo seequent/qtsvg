@@ -606,6 +606,7 @@ public:
         return path;
     }
 
+    // Converts the contents of the 'd' attribute on an svg path tag to a full path tag
     QString pathDataToSvg(const QString &data, Qt::FillRule fillRule) {
         QString path;
         QTextStream path_stream(&path);
@@ -1065,36 +1066,13 @@ void QSvgPaintEngine::updateState(const QPaintEngineState &state)
 {
     Q_D(QSvgPaintEngine);
     QPaintEngine::DirtyFlags flags = state.state();
-    QString *previousString = d->stream->string();
     bool currentGHasContents = d->currentBody.size() > d->gSize || !d->currentPathContents.isEmpty();
     bool afterFirstUpdate = d->afterFirstUpdate;
+    bool pathsWereMerged = d->pathsMergeable;
+    QString clipString = d->currentClipString;
 
     // always stream full gstate, which is not required, but...
     flags |= QPaintEngine::AllDirty;
-
-    // stream the current g state plus drawing commands to the final body, if content was added after the g was created
-    if (currentGHasContents) {
-        d->stream->setString(&d->body, QIODevice::Append);
-        *d->stream << d->currentBody;
-        d->currentBody.clear();
-        if (d->pathsMergeable) {
-            qDebug("QSvgPaintEngine::updateState: merging paths");
-            *d->stream << pathDataToSvg(d->currentPathContents, Qt::OddEvenFill);  // fillRule doesn't matter, no fill is actually set
-        } else {
-            qDebug("QSvgPaintEngine::updateState: NOT merging paths");
-            *d->stream << d->currentPathContents;  // tags are already fully written
-        }
-        d->currentPathContents.clear();
-
-        // save the current clipping if it exists, since it is now being used by a saved g tag
-        if (!d->currentClipString.isEmpty()) {
-            d->stream->setString(&d->defs, QIODevice::Append);
-            *d->stream << d->currentClipString;
-            d->savedClips += d->currentClipID;
-        }
-
-        d->afterFirstUpdate = true;  // we have streamed something, record this
-    }
 
     QString newGState;  // Temporary location to store updated state
     d->stream->setString(&newGState);
@@ -1157,20 +1135,45 @@ void QSvgPaintEngine::updateState(const QPaintEngineState &state)
     }
 
     *d->stream << '>' << endl;
-    d->stream->setString(previousString, QIODevice::Append);
 
     // state has changed, start a new g tag - otherwise we will just keep appending to the previous one
     if (d->previousGState != newGState) {
-        d->currentBody.clear();  // clear now, previously only cleared if streamed - we are now discarding the old state completely
+        // stream the current g state plus drawing commands to the final body, if content was added after the g was created
+        if (currentGHasContents) {
+            d->stream->setString(&d->body, QIODevice::Append);
+            *d->stream << d->currentBody;
+
+            // stream potentially-merged paths
+            if (!d->currentPathContents.isEmpty()) {
+                if (pathsWereMerged) {
+                    *d->stream << pathDataToSvg(d->currentPathContents, Qt::OddEvenFill);  // fillRule doesn't matter, no fill is actually set
+                } else {
+                    *d->stream << d->currentPathContents;  // tags are already fully written
+                }
+                d->currentPathContents.clear();
+            }
+            
+            // save the current clipping if it exists, since it is now being used by a saved g tag
+            if (!clipString.isEmpty()) {
+                d->stream->setString(&d->defs, QIODevice::Append);
+                *d->stream << clipString;
+                d->savedClips += d->currentClipID;
+            }
+        }
+
+        d->afterFirstUpdate = true;  // we have streamed something, record this        
+        d->currentBody.clear();  // we are now discarding the old state completely
 
         // close old state and start a new one...
+        d->stream->setString(d->currentBody, QIODevice::Append);
         if (afterFirstUpdate)
             *d->stream << "</g>\n\n";
         *d->stream << newGState;
         d->previousGState = newGState;
+        d->gSize = d->currentBody.size(); 
+    } else {
+        d->stream->setString(d->currentBody, QIODevice::Append);
     }
-
-    d->gSize = d->currentBody.size();   
 }
 
 void QSvgPaintEngine::drawEllipse(const QRectF &r)
