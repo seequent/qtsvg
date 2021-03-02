@@ -122,6 +122,7 @@ public:
     bool      pathsMergeable;
     QString   currentPathContents;
     int       gSize;
+    QString   previousGState;
 
     QBrush brush;
     QPen pen;
@@ -1107,12 +1108,12 @@ void QSvgPaintEngine::updateState(const QPaintEngineState &state)
                     clip_path_to_id[clip_path] = clip_counter++;
 
                 d->currentClipID = clip_path_to_id[clip_path];
-                
-                out.setString(&d->currentClipString, QIODevice::Append);
+                d->stream->setString(&d->currentClipString, QIODevice::Append);
+                *d->stream << "<clipPath id=\"clip" << clip_path_to_id[clip_path] << "\">" << endl;
+                *d->stream << '\t' << clip_path;
+                *d->stream << "</clipPath>" << endl;
 
-                out << "<clipPath id=\"clip" << clip_path_to_id[clip_path] << "\">" << endl;
-                out << '\t' << clip_path;
-                out << "</clipPath>" << endl;
+                d->stream->setString(&newGState, QIODevice::Append);
             }
 
             *d->stream << "clip-path=\"url(#clip" << clip_path_to_id[clip_path] << ")\" ";
