@@ -520,10 +520,14 @@ public:
             d_func()->attributes.fill = QLatin1String("none");
             d_func()->attributes.fillOpacity = QString();
             d_func()->pathsMergeable = true;  // with no fill, we can squash paths together not caring about the Qt::FillRule in use
-            return;
             break;
         default:
             break;
+        }
+        if (d_func()->pathsMergeable) {
+            qDebug("qbrushToSvg: merging paths");
+        } else {
+            qDebug("qbrushToSvg: NOT merging paths");
         }
     }
     void qfontToSvg(const QFont &sfont)
@@ -1074,8 +1078,10 @@ void QSvgPaintEngine::updateState(const QPaintEngineState &state)
         *d->stream << d->currentBody;
         d->currentBody.clear();
         if (d->pathsMergeable) {
+            qDebug("QSvgPaintEngine::updateState: merging paths");
             *d->stream << pathDataToSvg(d->currentPathContents, Qt::OddEvenFill);  // fillRule doesn't matter, no fill is actually set
         } else {
+            qDebug("QSvgPaintEngine::updateState: NOT merging paths");
             *d->stream << d->currentPathContents;  // tags are already fully written
         }
         d->currentPathContents.clear();
@@ -1197,7 +1203,9 @@ void QSvgPaintEngine::drawPath(const QPainterPath &p)
         if (!d->currentPathContents.isEmpty())
             out << " ";
         out << pathData;  // Just append data portion
+        qDebug("QSvgPaintEngine::drawPath: merging paths");
     } else {
+        qDebug("QSvgPaintEngine::drawPath: NOT merging paths");
         out << pathDataToSvg(pathData, p.fillRule());  // Output whole tag
     }
 }
