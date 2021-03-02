@@ -1185,6 +1185,10 @@ void QSvgPaintEngine::drawEllipse(const QRectF &r)
 void QSvgPaintEngine::drawPath(const QPainterPath &p)
 {
     Q_D(QSvgPaintEngine);
+
+    if (p.isEmpty())
+        return;
+
     QString pathData = qPainterPathToPathData(p);
     QTextStream out(&d->currentPathContents, QIODevice::Append);
     if (d->pathsMergeable) {
