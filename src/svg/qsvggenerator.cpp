@@ -463,6 +463,7 @@ public:
     void qbrushToSvg(const QBrush &sbrush)
     {
         d_func()->brush = sbrush;
+        d_func()->pathsMergeable = false;
         switch (sbrush.style()) {
         case Qt::SolidPattern: {
             QString color, colorOpacity;
@@ -518,10 +519,11 @@ public:
             stream() << QLatin1String("fill=\"none\" ");
             d_func()->attributes.fill = QLatin1String("none");
             d_func()->attributes.fillOpacity = QString();
+            d_func()->pathsMergeable = true;  // with no fill, we can squash paths together not caring about the Qt::FillRule in use
             return;
             break;
         default:
-           break;
+            break;
         }
     }
     void qfontToSvg(const QFont &sfont)
@@ -1123,7 +1125,6 @@ void QSvgPaintEngine::updateState(const QPaintEngineState &state)
 
     if (flags & QPaintEngine::DirtyBrush) {
         qbrushToSvg(state.brush());
-        d->pathsMergeable = d_func()->attributes.fill == QLatin1String("none");  // paths are unfilled so can be squashed into one tag
     }
 
     if (flags & QPaintEngine::DirtyPen) {
