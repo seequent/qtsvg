@@ -39,6 +39,7 @@
 
 #ifndef QT_NO_SVGGENERATOR
 
+#include "qset.h"
 #include "qpainterpath.h"
 #include "qsvggenerator.h"
 #include "qtransform.h"
@@ -110,10 +111,17 @@ public:
     QTextStream *stream;
     int resolution;
 
-    QString header;
-    QString defs;
-    QString body;
-    bool    afterFirstUpdate;
+    QString   header;
+    QString   defs;
+    QString   body;
+    QString   currentBody;
+    QString   currentClipString;
+    uint      currentClipID;
+    QSet<int> savedClips;
+    bool      afterFirstUpdate;
+    bool      pathsMergeable;
+    QString   currentPathContents;
+    int       gSize;
 
     QBrush brush;
     QPen pen;
@@ -163,7 +171,6 @@ class QSvgPaintEngine : public QPaintEngine
 private:
     unsigned int clip_counter = 0;
     std::map<QString, int> clip_path_to_id;
-    QString createPath(const QPainterPath &p);
 
 public:
 
@@ -552,6 +559,61 @@ public:
                       "font-style=\"" << d->attributes.font_style << "\" "
                    << endl;
     }
+
+    // Converts a QPainterPath to the contents of the 'd' attribute on an svg path tag
+    QString qPainterPathToPathData(const QPainterPath &p) {
+        QString path;
+        QTextStream path_stream(&path);
+
+        for (int i = 0; i < p.elementCount(); ++i) {
+            const QPainterPath::Element &e = p.elementAt(i);
+            switch (e.type) {
+            case QPainterPath::MoveToElement:
+                path_stream << 'M' << e.x << ',' << e.y;
+                break;
+            case QPainterPath::LineToElement:
+                path_stream << 'L' << e.x << ',' << e.y;
+                break;
+            case QPainterPath::CurveToElement:
+                path_stream << 'C' << e.x << ',' << e.y;
+                ++i;
+                while (i < p.elementCount()) {
+                    const QPainterPath::Element &e = p.elementAt(i);
+                    if (e.type != QPainterPath::CurveToDataElement) {
+                        --i;
+                        break;
+                    } else
+                        path_stream << ' ';
+                    path_stream << e.x << ',' << e.y;
+                    ++i;
+                }
+                break;
+            default:
+                break;
+            }
+            if (i != p.elementCount() - 1) {
+                path_stream << ' ';
+            }
+        }
+
+        return path;
+    }
+
+    QString pathDataToSvg(const QString &data, Qt::FillRule fillRule) {
+        QString path;
+        QTextStream path_stream(&path);
+
+        path_stream << "<path vector-effect=\""
+                    << (state->pen().isCosmetic() ? "non-scaling-stroke" : "none") 
+                    << "\" fill-rule=\""
+                    << (fillRule == Qt::OddEvenFill ? "evenodd" : "nonzero") 
+                    << "\" d=\"";
+
+        path_stream << data;
+
+        path_stream << "\"/>" << endl;
+        return path;
+    }
 };
 
 class QSvgGeneratorPrivate
@@ -914,6 +976,7 @@ bool QSvgPaintEngine::begin(QPaintDevice *)
         *d->stream << ' ' << d->viewBox.width() << ' ' << d->viewBox.height() << '\"' << endl;
     }
 
+    // stream the svg spec version: note that clipping is not supported in SVG1.2Tiny, but browsers generally ignore this
     *d->stream << " xmlns=\"http://www.w3.org/2000/svg\""
                   " xmlns:xlink=\"http://www.w3.org/1999/xlink\" "
                   " version=\"1.2\" baseProfile=\"tiny\">" << endl;
@@ -929,11 +992,7 @@ bool QSvgPaintEngine::begin(QPaintDevice *)
     d->stream->setString(&d->defs);
     *d->stream << "<defs>\n";
 
-    d->stream->setString(&d->body);
-    // Start the initial graphics state...
-    *d->stream << "<g ";
-    generateQtDefaults();
-    *d->stream << endl;
+    d->stream->setString(&d->currentBody);
 
     return true;
 }
@@ -957,8 +1016,7 @@ bool QSvgPaintEngine::end()
     if (d->afterFirstUpdate)
         *d->stream << "</g>" << endl; // close the updateState
 
-    *d->stream << "</g>" << endl // close the Qt defaults
-               << "</svg>" << endl;
+    *d->stream << "</svg>" << endl;
 
     delete d->stream;
 
@@ -1000,32 +1058,61 @@ void QSvgPaintEngine::updateState(const QPaintEngineState &state)
 {
     Q_D(QSvgPaintEngine);
     QPaintEngine::DirtyFlags flags = state.state();
+    QString *previousString = d->stream->string();
+    bool currentGHasContents = d->currentBody.size() > d->gSize || !d->currentPathContents.isEmpty();
+    bool afterFirstUpdate = d->afterFirstUpdate;
 
     // always stream full gstate, which is not required, but...
     flags |= QPaintEngine::AllDirty;
 
-    // close old state and start a new one...
-    if (d->afterFirstUpdate)
-        *d->stream << "</g>\n\n";
+    // stream the current g state plus drawing commands to the final body, if content was added after the g was created
+    if (currentGHasContents) {
+        d->stream->setString(&d->body, QIODevice::Append);
+        *d->stream << d->currentBody;
+        d->currentBody.clear();
+        if (d->pathsMergeable) {
+            *d->stream << pathDataToSvg(d->currentPathContents, Qt::OddEvenFill);  // fillRule doesn't matter, no fill is actually set
+        } else {
+            *d->stream << d->currentPathContents;  // tags are already fully written
+        }
+        d->currentPathContents.clear();
+
+        // save the current clipping if it exists, since it is now being used by a saved g tag
+        if (!d->currentClipString.isEmpty()) {
+            d->stream->setString(&d->defs, QIODevice::Append);
+            *d->stream << d->currentClipString;
+            d->savedClips += d->currentClipID;
+        }
+
+        d->afterFirstUpdate = true;  // we have streamed something, record this
+    }
+
+    QString newGState;  // Temporary location to store updated state
+    d->stream->setString(&newGState);
 
     *d->stream << "<g ";
 
     QPainter* p = painter();
+    d->currentClipString.clear();
     if (p->hasClipping()) {
         QPainterPath painter_path = p->clipPathF();
 
         if (painter_path.elementCount() > 0) {
-            QString clip_path = createPath(painter_path);
+            QString clip_path = pathDataToSvg(qPainterPathToPathData(painter_path), painter_path.fillRule());
 
             bool path_does_not_exist = 0 == clip_path_to_id.count(clip_path);
-            if (path_does_not_exist) {
-                clip_path_to_id[clip_path] = clip_counter++;
-                
-                QTextStream str(&d_func()->defs, QIODevice::Append);
+            bool path_never_saved = path_does_not_exist || !d->savedClips.contains(clip_path_to_id[clip_path]);
+            if (path_never_saved) {  // Either a never-seen clip, or a clip that was chucked when the g state was discarded
+                if (path_does_not_exist)
+                    clip_path_to_id[clip_path] = clip_counter++;
 
-                str << "<clipPath id=\"clip" << clip_path_to_id[clip_path] << "\">" << endl;
-                str << '\t' << clip_path;
-                str << "</clipPath>" << endl;
+                d->currentClipID = clip_path_to_id[clip_path];
+                
+                out.setString(&d->currentClipString, QIODevice::Append);
+
+                out << "<clipPath id=\"clip" << clip_path_to_id[clip_path] << "\">" << endl;
+                out << '\t' << clip_path;
+                out << "</clipPath>" << endl;
             }
 
             *d->stream << "clip-path=\"url(#clip" << clip_path_to_id[clip_path] << ")\" ";
@@ -1035,6 +1122,7 @@ void QSvgPaintEngine::updateState(const QPaintEngineState &state)
 
     if (flags & QPaintEngine::DirtyBrush) {
         qbrushToSvg(state.brush());
+        d->pathsMergeable = d_func()->attributes.fill == QLatin1String("none");  // paths are unfilled so can be squashed into one tag
     }
 
     if (flags & QPaintEngine::DirtyPen) {
@@ -1061,8 +1149,20 @@ void QSvgPaintEngine::updateState(const QPaintEngineState &state)
     }
 
     *d->stream << '>' << endl;
+    d->stream->setString(previousString, QIODevice::Append);
 
-    d->afterFirstUpdate = true;
+    // state has changed, start a new g tag - otherwise we will just keep appending to the previous one
+    if (d->previousGState != newGState) {
+        d->currentBody.clear();  // clear now, previously only cleared if streamed - we are now discarding the old state completely
+
+        // close old state and start a new one...
+        if (afterFirstUpdate)
+            *d->stream << "</g>\n\n";
+        *d->stream << newGState;
+        d->previousGState = newGState;
+    }
+
+    d->gSize = d->currentBody.size();   
 }
 
 void QSvgPaintEngine::drawEllipse(const QRectF &r)
@@ -1082,59 +1182,18 @@ void QSvgPaintEngine::drawEllipse(const QRectF &r)
     *d->stream << "\"/>" << endl;
 }
 
-QString QSvgPaintEngine::createPath(const QPainterPath &p)
-{
-    QTextStream path_stream;
-    QString path;
-
-    path_stream.setString(&path);
-
-    path_stream << "<path vector-effect=\""
-                << (state->pen().isCosmetic() ? "non-scaling-stroke" : "none") 
-                << "\" fill-rule=\""
-                << (p.fillRule() == Qt::OddEvenFill ? "evenodd" : "nonzero") 
-                << "\" d=\"";
-
-    for (int i = 0; i < p.elementCount(); ++i) {
-        const QPainterPath::Element &e = p.elementAt(i);
-        switch (e.type) {
-        case QPainterPath::MoveToElement:
-            path_stream << 'M' << e.x << ',' << e.y;
-            break;
-        case QPainterPath::LineToElement:
-            path_stream << 'L' << e.x << ',' << e.y;
-            break;
-        case QPainterPath::CurveToElement:
-            path_stream << 'C' << e.x << ',' << e.y;
-            ++i;
-            while (i < p.elementCount()) {
-                const QPainterPath::Element &e = p.elementAt(i);
-                if (e.type != QPainterPath::CurveToDataElement) {
-                    --i;
-                    break;
-                } else
-                    path_stream << ' ';
-                path_stream << e.x << ',' << e.y;
-                ++i;
-            }
-            break;
-        default:
-            break;
-        }
-        if (i != p.elementCount() - 1) {
-            path_stream << ' ';
-        }
-    }
-
-    path_stream << "\"/>" << endl;
-    return path;
-}
-
 void QSvgPaintEngine::drawPath(const QPainterPath &p)
 {
     Q_D(QSvgPaintEngine);
-
-    *d->stream << createPath(p);
+    QString pathData = qPainterPathToPathData(p);
+    QTextStream out(&d->currentPathContents, QIODevice::Append);
+    if (d->pathsMergeable) {
+        if (!d->currentPathContents.isEmpty())
+            out << " ";
+        out << pathData;  // Just append data portion
+    } else {
+        out << pathDataToSvg(pathData, p.fillRule());  // Output whole tag
+    }
 }
 
 void QSvgPaintEngine::drawPolygon(const QPointF *points, int pointCount,
