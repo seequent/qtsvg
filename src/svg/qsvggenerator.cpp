@@ -85,6 +85,63 @@ static void translate_dashPattern(const QVector<qreal> &pattern, qreal width, QS
     pattern_string->chop(1);
 }
 
+// Converts a QPainterPath to the contents of the 'd' attribute on an svg path start tag
+static QString qPainterPathToPathData(const QPainterPath &p) {
+    QString path;
+    QTextStream path_stream(&path);
+
+    for (int i = 0; i < p.elementCount(); ++i) {
+        const QPainterPath::Element &e = p.elementAt(i);
+        switch (e.type) {
+        case QPainterPath::MoveToElement:
+            path_stream << 'M' << e.x << ',' << e.y;
+            break;
+        case QPainterPath::LineToElement:
+            path_stream << 'L' << e.x << ',' << e.y;
+            break;
+        case QPainterPath::CurveToElement:
+            path_stream << 'C' << e.x << ',' << e.y;
+            ++i;
+            while (i < p.elementCount()) {
+                const QPainterPath::Element &e = p.elementAt(i);
+                if (e.type != QPainterPath::CurveToDataElement) {
+                    --i;
+                    break;
+                } else
+                    path_stream << ' ';
+                path_stream << e.x << ',' << e.y;
+                ++i;
+            }
+            break;
+        default:
+            break;
+        }
+        if (i != p.elementCount() - 1) {
+            path_stream << ' ';
+        }
+    }
+
+    return path;
+}
+
+// Converts the contents of the 'd' attribute on an svg path start tag to a full path element
+static QString pathDataToSvg(const QString &data, Qt::FillRule fillRule) {
+    QString path;
+    QTextStream path_stream(&path);
+
+    path_stream << "<path vector-effect=\""
+                << (state->pen().isCosmetic() ? "non-scaling-stroke" : "none") 
+                << "\" fill-rule=\""
+                << (fillRule == Qt::OddEvenFill ? "evenodd" : "nonzero") 
+                << "\" d=\"";
+
+    path_stream << data;
+
+    path_stream << "\"/>" << endl;        
+    return path;
+}
+
+
 class QSvgPaintEnginePrivate : public QPaintEnginePrivate
 {
 public:
@@ -596,62 +653,6 @@ public:
                       "font-weight=\"" << d->attributes.font_weight << "\" "
                       "font-style=\"" << d->attributes.font_style << "\" "
                    << endl;
-    }
-
-    // Converts a QPainterPath to the contents of the 'd' attribute on an svg path start tag
-    QString qPainterPathToPathData(const QPainterPath &p) {
-        QString path;
-        QTextStream path_stream(&path);
-
-        for (int i = 0; i < p.elementCount(); ++i) {
-            const QPainterPath::Element &e = p.elementAt(i);
-            switch (e.type) {
-            case QPainterPath::MoveToElement:
-                path_stream << 'M' << e.x << ',' << e.y;
-                break;
-            case QPainterPath::LineToElement:
-                path_stream << 'L' << e.x << ',' << e.y;
-                break;
-            case QPainterPath::CurveToElement:
-                path_stream << 'C' << e.x << ',' << e.y;
-                ++i;
-                while (i < p.elementCount()) {
-                    const QPainterPath::Element &e = p.elementAt(i);
-                    if (e.type != QPainterPath::CurveToDataElement) {
-                        --i;
-                        break;
-                    } else
-                        path_stream << ' ';
-                    path_stream << e.x << ',' << e.y;
-                    ++i;
-                }
-                break;
-            default:
-                break;
-            }
-            if (i != p.elementCount() - 1) {
-                path_stream << ' ';
-            }
-        }
-
-        return path;
-    }
-
-    // Converts the contents of the 'd' attribute on an svg path start tag to a full path element
-    QString pathDataToSvg(const QString &data, Qt::FillRule fillRule) {
-        QString path;
-        QTextStream path_stream(&path);
-
-        path_stream << "<path vector-effect=\""
-                    << (state->pen().isCosmetic() ? "non-scaling-stroke" : "none") 
-                    << "\" fill-rule=\""
-                    << (fillRule == Qt::OddEvenFill ? "evenodd" : "nonzero") 
-                    << "\" d=\"";
-
-        path_stream << data;
-
-        path_stream << "\"/>" << endl;        
-        return path;
     }
 
     // Set the current clipPath element for the defs containing the given path, and the currentClipID
