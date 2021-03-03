@@ -159,7 +159,7 @@ public:
 
     void outputCurrentGroup(bool createPathTags, const QString &clipString, const uint clipID) {
         bool currentGHasContents = currentGroup.size() &&             // group has been opened AND
-                                   (currentGroup.size() > gSize) ||   // (group was appended to after opening OR
+                                   (currentGroup.size() > gSize ||    // (group was appended to after opening OR
                                     !currentPathContents.isEmpty());  //  group has paths that need outputting)
         if (currentGHasContents) {
             // output the current group to the main svg body
@@ -665,7 +665,7 @@ public:
             return;
         }
 
-        QString pathElement = pathDataToSvg(qPainterPathToPathData(painter_path), painter_path.fillRule());
+        QString pathElement = pathDataToSvg(qPainterPathToPathData(clipPath), clipPath.fillRule());
 
         bool path_does_not_exist = 0 == clip_path_to_id.count(pathElement);
         if (path_does_not_exist)
@@ -674,9 +674,7 @@ public:
 
         bool path_never_saved = path_does_not_exist || !d->savedClipIDs.contains(d->currentClipID);
         if (path_never_saved) {  // Either a never-seen clip, or a clip that was chucked when the g state was discarded
-            d->currentClipString = QString("<clipPath id=\"clip%1\">\n\t%2</clipPath>\n").args(
-                d->currentClipID, pathElement
-            )
+            d->currentClipString = QString("<clipPath id=\"clip%1\">\n\t%2</clipPath>\n").arg(d->currentClipID, pathElement);
         }
 
         *d->stream << "clip-path=\"url(#clip" << d->currentClipID << ")\" ";
@@ -1069,7 +1067,7 @@ bool QSvgPaintEngine::end()
     Q_D(QSvgPaintEngine);
 
     // complete the body
-    d->outputCurrentGroup(d->mergePaths, d->currentClipString, d->currentClipID)
+    d->outputCurrentGroup(d->mergePaths, d->currentClipString, d->currentClipID);
 
     // close the defs
     d->stream->setString(&d->defs);
@@ -1167,9 +1165,7 @@ void QSvgPaintEngine::updateState(const QPaintEngineState &state)
 
     *d->stream << "<g ";
 
-    if (flags & QPaintEngine::DirtyFlags(QPainterEngine::DirtyClipRegion ||
-                                         QPainterEngine::DirtyClipPath   ||
-                                         QPainterEngine::DirtyClipEnabled)) {
+    if (flags & (QPaintEngine::DirtyClipRegion | QPaintEngine::DirtyClipPath | QPaintEngine::DirtyClipEnabled)) {
         // (iv) this sets up the current clip, which will be the same as the old one if the state is unchanged
         QPainter* p = painter();
         clipPathToSvg(p->clipPathF(), p->hasClipping());
