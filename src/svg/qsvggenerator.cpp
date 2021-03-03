@@ -675,7 +675,7 @@ public:
 
         bool path_never_saved = path_does_not_exist || !d->savedClipIDs.contains(d->currentClipID);
         if (path_never_saved) {  // Either a never-seen clip, or a clip that was chucked when the g state was discarded
-            d->currentClipString = QString("<clipPath id=\"clip%1\">\n\t%2</clipPath>\n").arg(d->currentClipID, pathElement);
+            d->currentClipString = QString("<clipPath id=\"clip%1\">\n\t%2</clipPath>\n").arg(d->currentClipID).arg(pathElement);
         }
 
         *d->stream << "clip-path=\"url(#clip" << d->currentClipID << ")\" ";
