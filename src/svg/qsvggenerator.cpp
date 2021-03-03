@@ -173,7 +173,7 @@ public:
     QString   body;
     QString   currentGroup;       // Contents of the currently open svg group element
     QString   currentClipString;  // The clipPath element for the currently set clipping
-    uint      currentClipID = 0;  // The ID of the current clipPath element, used for referencing. 0 indicates no clipping
+    uint      currentClipID;      // The ID of the current clipPath element, used for referencing
     QSet<int> savedClipIDs;       // All IDs of clipPath elements that have been saved to the defs element string
     bool      afterFirstUpdate;   // Whether any content has been saved to the body string
     bool      mergePaths;         // Whether all path elements in the current group can be squashed into one as an optimisation
@@ -236,7 +236,7 @@ public:
             *stream << "</g>\n";  // Close the group
             
             // ii. save the group's clipping if it exists, since it is now being used by a saved g tag
-            if (clipString.size()) {
+            if (clipString.size() && !savedClipIDs.contains(clipID)) {
                 stream->setString(&defs, QIODevice::Append);
                 *stream << clipString;
                 savedClipIDs += clipID;
@@ -661,10 +661,8 @@ public:
 
         d->currentClipString.clear();  // We will always overwrite or blank this
 
-        if (!clippingEnabled || clipPath.isEmpty()) {
-            d->currentClipID = 0;  // Indicates no clipping           
-            return;
-        }
+        if (!clippingEnabled || clipPath.isEmpty())      
+            return;  // Nothing to do
 
         QString pathElement = pathDataToSvg(qPainterPathToPathData(clipPath), clipPath.fillRule(), pen);
 
@@ -1007,7 +1005,7 @@ bool QSvgPaintEngine::begin(QPaintDevice *)
 {
     Q_D(QSvgPaintEngine);
 
-    clip_counter = 1;  // 0 is used to flag 'no clipping'
+    clip_counter = 0;
 
     if (!d->outputDevice) {
         qWarning("QSvgPaintEngine::begin(), no output device");
