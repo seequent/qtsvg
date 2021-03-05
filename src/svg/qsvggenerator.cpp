@@ -661,14 +661,16 @@ public:
 
         d->currentClipString.clear();  // We will always overwrite or blank this
 
-        if (!clippingEnabled || clipPath.isEmpty())      
+        if (!clippingEnabled || clipPath.isEmpty()) {
             return;  // Nothing to do
+        }    
 
         QString pathElement = pathDataToSvg(qPainterPathToPathData(clipPath), clipPath.fillRule(), pen);
 
         bool path_does_not_exist = 0 == clip_path_to_id.count(pathElement);
-        if (path_does_not_exist)
+        if (path_does_not_exist) {
             clip_path_to_id[pathElement] = clip_counter++;  // Create a new clip ID for this path
+        }
         d->currentClipID = clip_path_to_id[pathElement];
 
         bool path_never_saved = path_does_not_exist || !d->savedClipIDs.contains(d->currentClipID);
@@ -1239,8 +1241,9 @@ void QSvgPaintEngine::drawPath(const QPainterPath &p)
 {
     Q_D(QSvgPaintEngine);
 
-    if (p.isEmpty())
+    if (p.isEmpty()) {
         return;
+    }
 
     QString pathData = qPainterPathToPathData(p);
     QTextStream out(&d->currentPathContents, QIODevice::Append);
