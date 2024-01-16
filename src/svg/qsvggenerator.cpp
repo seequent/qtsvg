@@ -126,6 +126,7 @@ public:
         attributes.font_weight = QLatin1String("normal");
 
         numGradients = 0;
+        savedClipIDs += -1;  // Never write -1 clip ID which means "no clipping"
     }
 
     QSvgGenerator::SvgVersion svgVersion;
@@ -187,7 +188,7 @@ public:
                 currentPathContents.size());   //  group has paths that need outputting)
     }
 
-    void outputCurrentGroup(const QString& clipString, const QString& clipName, const uint clipID, const QPen& gpen) {
+    void outputCurrentGroup(const QString& clipString, const QString& clipName, const int clipID, const QPen& gpen) {
         if (currentGHasContents()) {
             // output the current group to the main svg body
             stream->setString(&body, QIODevice::Append);
@@ -200,7 +201,7 @@ public:
         currentGroupTag.clear();
     }
 
-    void outputCurrentGroupContents(const QString& clipString, const QString &clipName, const uint clipID, const QPen& gpen) {
+    void outputCurrentGroupContents(const QString& clipString, const QString &clipName, const int clipID, const QPen& gpen) {
         if (!currentGHasContents()) {
             return;
         }
@@ -642,13 +643,15 @@ public:
     }
 
     // Set the current clipPath element for the defs containing the given path, and the currentClipID
-    QString clipPathToSvg(const QPainterPath& clipPath) {
+    void clipPathToSvg(const QPainterPath& clipPath) {
         Q_D(QSvgPaintEngine);
 
-        d->currentClipString.clear();  // We will always overwrite or blank this
+        // We will always overwrite or blank these
+        d->currentClipID = -1;
+        d->currentClipPathName.clear();
+        d->currentClipString.clear();
 
         if (clipPath.isEmpty() || !d->clipEnabled) {
-            d->currentClipID = -1;
             return;  // Nothing to do
         }
 
@@ -1191,7 +1194,7 @@ void QSvgPaintEngine::updateState(const QPaintEngineState &state)
     bool pathsWereMerged = d->mergePaths;
     QString clipString = d->currentClipString;
     QString clipName = d->currentClipPathName;
-    uint clipID = d->currentClipID;
+    int clipID = d->currentClipID;
     QPen gpen = d->pen;
 
     // first work out the new g state, since we always need to check this
