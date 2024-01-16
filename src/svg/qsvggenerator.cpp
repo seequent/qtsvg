@@ -143,7 +143,7 @@ public:
     int       currentClipID = -1;  // The ID of the current clipPath element, used for referencing
     QSet<int> savedClipIDs;        // All IDs of clipPath elements that have been saved to the defs element string
     bool      mergePaths;          // Whether all path elements in the current group can be squashed into one as an optimisation
-    uint      currentGHash;        // The hash of the current group start element tag, for comparisons
+    size_t    currentGHash;        // The hash of the current group start element tag, for comparisons
     std::unordered_map<QString, int> clipPathToId;  // Mapping of clipPath as stored in currentClipString to its clip ID
 
     // Stores all path data in the currently open group, iff path merging is taking place, as just the path data attribute
@@ -200,7 +200,7 @@ public:
         currentGroupTag.clear();
     }
 
-    bool outputCurrentGroupContents(const QString& clipString, const QString &clipName, const uint clipID, const QPen& gpen) {
+    void outputCurrentGroupContents(const QString& clipString, const QString &clipName, const uint clipID, const QPen& gpen) {
         if (!currentGHasContents()) {
             return;
         }
@@ -1217,7 +1217,7 @@ void QSvgPaintEngine::updateState(const QPaintEngineState &state)
         stream() << "opacity=\""<<state.opacity()<<"\" ";
 
     *d->stream << '>' << Qt::endl;
-    uint newGHash = qHash(newGState);
+    auto newGHash = qHash(newGState);
     const auto stateChanged = newGHash != d->currentGHash;
 
     // (v) save current clipping parameters
