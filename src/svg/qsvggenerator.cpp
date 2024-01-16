@@ -219,7 +219,7 @@ public:
 
         // enclose in clip tag
         if (hasClipName) {
-            *stream << QLatin1String("<g clip-path=\"url(#%1)\">").arg(clipName);
+            *stream << QString(QStringLiteral("<g clip-path=\"url(#%1)\">")).arg(clipName);
         }
 
         // stream main group contents
@@ -662,11 +662,11 @@ public:
             d->clipPathToId[pathElement] = d->numClipPaths++;  // Create a new clip ID for this path
         }
         d->currentClipID = d->clipPathToId[pathElement];
-        d->currentClipPathName = QLatin1String("clip%1").arg(d->currentClipID);
+        d->currentClipPathName = QString(QStringLiteral("clip%1")).arg(d->currentClipID);
 
         bool clipPathNotSaved = clipPathIsNew || !d->savedClipIDs.contains(d->currentClipID);
         if (clipPathNotSaved) {  // Either a never-seen clip, or a clip that was chucked when the g state was discarded
-            d->currentClipString = QLatin1String("<clipPath id=\"%1\">\n\t%2</clipPath>\n").arg(d->currentClipPathName).arg(pathElement);
+            d->currentClipString = QString(QStringLiteral("<clipPath id=\"%1\">\n\t%2</clipPath>\n")).arg(d->currentClipPathName, pathElement);
         }
     }
 };
