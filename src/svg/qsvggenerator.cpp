@@ -188,39 +188,14 @@ public:
                 currentPathContents.size());   //  group has paths that need outputting)
     }
 
-    void outputCurrentGroup(const QString& clipString, const QString& clipName, const int clipID, const QPen& gpen) {
-        if (currentGHasContents()) {
-            // output the current group to the main svg body
-            stream->setString(&body, QIODevice::Append);
-            *stream << currentGroupTag;
-            outputCurrentGroupContents(clipString, clipName, clipID, gpen);
-            stream->setString(&body, QIODevice::Append);
-            *stream << "</g>\n";  // Close the group
-            stream->setString(&currentNonPathContents, QIODevice::Append);
-        }
-        currentGroupTag.clear();
-    }
-
-    void outputCurrentGroupContents(const QString& clipString, const QString &clipName, const int clipID, const QPen& gpen) {
+    void outputCurrentAttrGroup(const QPen& gpen) {
         if (!currentGHasContents()) {
             return;
         }
 
-        // Save the group's clipping if it exists, since it is now being used by a saved g tag
-        const auto hasClipName = !clipName.isEmpty();
-        if (!clipString.isEmpty() && hasClipName && !savedClipIDs.contains(clipID)) {
-            stream->setString(&defs, QIODevice::Append);
-            *stream << clipString;
-            savedClipIDs += clipID;
-        }
-
-        // output the current group contents to the main svg body
+        // output the current group to the main svg body
         stream->setString(&body, QIODevice::Append);
-
-        // enclose in clip tag
-        if (hasClipName) {
-            *stream << QString(QStringLiteral("<g clip-path=\"url(#%1)\">")).arg(clipName);
-        }
+        *stream << currentGroupTag;
 
         // stream main group contents
         if (!currentNonPathContents.isEmpty()) {
@@ -234,10 +209,38 @@ public:
             currentPathContents.clear();
         }
 
+        *stream << "</g>\n";  // Close the group
+        stream->setString(&currentNonPathContents, QIODevice::Append);
+    }
+
+    void outputCurrentClipGroup(const QString& clipString, const QString &clipName, const int clipID, const QPen& gpen) {
+        if (!currentGHasContents()) {
+            return;
+        }
+
+        // Save the group's clipping if it exists, since it is now being used by a saved g tag
+        const auto hasClipName = !clipName.isEmpty();
+        if (!savedClipIDs.contains(clipID) && !clipString.isEmpty() && hasClipName) {
+            stream->setString(&defs, QIODevice::Append);
+            *stream << clipString;
+            savedClipIDs += clipID;
+        }
+
+        // enclose in clip tag
+        if (hasClipName) {
+            // output the current clip group contents to the main svg body
+            stream->setString(&body, QIODevice::Append);
+            *stream << QString(QStringLiteral("<g clip-path=\"url(#%1)\">")).arg(clipName);
+        }
+
+        outputCurrentAttrGroup(gpen);
+
         // close clip tag
         if (hasClipName) {
+            stream->setString(&body, QIODevice::Append);
             *stream << QStringLiteral("</g>");
         }
+
         stream->setString(&currentNonPathContents, QIODevice::Append);
     }
 
@@ -1098,7 +1101,7 @@ bool QSvgPaintEngine::end()
     Q_D(QSvgPaintEngine);
 
     // complete the body
-    d->outputCurrentGroup(d->currentClipString, d->currentClipPathName, d->currentClipID, d->pen);
+    d->outputCurrentClipGroup(d->currentClipString, d->currentClipPathName, d->currentClipID, d->pen);
 
     // close the defs
     d->stream->setString(&d->defs);
@@ -1162,8 +1165,8 @@ void QSvgPaintEngine::updateState(const QPaintEngineState &state)
 
     There are three scenarios this needs to handle:
     1. the new `state` is the first state we have have
-    2. the new `state` is different from the current state (tested by comparing hashes)
-    3. the new `state` is different from the current state, but only in terms of clipping
+    2. the new clipping `state` is different from the current state
+    3. the new `state` (excluding clipping) is different from the current state (tested by comparing hashes)
     4. the new `state` is just setting the existing state again, which happens frequently
 
     There are also two potential current state variants to consider:
@@ -1171,9 +1174,9 @@ void QSvgPaintEngine::updateState(const QPaintEngineState &state)
     b. The current group has child elements
 
     There are six actions this method can take, in almost any combination:
-    i.   Write the current clipping group contents to the final svg body, with a closing </g> tag
-    ii.  Write the current attribute group contents to the final svg body, with a closing </g> tags, including (i)
-    iii. Write the current clipPath string to the final svg defs, when (i) involved writing a clip url()
+    i.   Write the current attribute group contents to the final svg body, with a closing </g> tags
+    ii.  Write the current clipping group contents to the final svg body, with a closing </g> tag, including (i)
+    iii. Write the current clipPath string to the final svg defs, when (ii) involved writing a clip url()
     iv.  Wipe the current group contents
     v.   Set the clipPath string and set the current clip ID, if clipping is enabled
     vi.  Create a new attribute group g start tag
@@ -1182,8 +1185,8 @@ void QSvgPaintEngine::updateState(const QPaintEngineState &state)
     1   -> (v) and (vi)  (and (iv), but this does nothing)
     2.a -> (iv) to (vi)
     2.b -> (i) to (vi)
-    3.a -> (iv) and (v)
-    3.b -> (i), (iii) to (v)
+    3.a -> (iv) and (vi)
+    3.b -> (i), (iv) to (vi)
     4   -> do nothing, wait for state to actually change
     */
 
@@ -1197,7 +1200,7 @@ void QSvgPaintEngine::updateState(const QPaintEngineState &state)
     int clipID = d->currentClipID;
     QPen gpen = d->pen;
 
-    // first work out the new g state, since we always need to check this
+    // (vi) First work out the new g state, since we always need to check this
     QString newGState;
     d->stream->setString(&newGState);
 
@@ -1227,20 +1230,21 @@ void QSvgPaintEngine::updateState(const QPaintEngineState &state)
     updateClipState(state);
     const auto clipChanged = clipID != d->currentClipID;
 
-    // 2.b -> (i) to (iii), state has changed, see if current group has contents and clipping that need saving
+    // 2.b -> (i) to (iii), clipping has changed, see if current group has contents and clipping that need saving
     // And also 2.a, 2.b -> (iv), clear the previous group data
-    if (stateChanged) {
-        d->outputCurrentGroup(clipString, clipName, clipID, gpen);
-        // 1, 2.a, 2.b -> (vi), start a new attribute group element
-        d->currentGroupTag = newGState;
-        d->currentGHash = newGHash;
+    if (clipChanged) {
+        d->outputCurrentClipGroup(clipString, clipName, clipID, gpen);
     }
-    // 3.b -> (i) and (iii), clipping has changed, see if current group has contents and clipping that need saving
+    // 3.b -> (i), state has changed, see if current group has contents and attributes that need saving
     // And also 3.a, 3.b -> (iv), clear the previous group data
-    else if (clipChanged) {
-        d->outputCurrentGroupContents(clipString, clipName, clipID, gpen);
+    else if (stateChanged) {
+        d->outputCurrentAttrGroup(gpen);     
     }
     // (else: 3. state has not changed)
+
+    // 1, 2, 3 -> (vi), start a new attribute group element
+    d->currentGroupTag = newGState;
+    d->currentGHash = newGHash;
 
     d->stream->setString(&d->currentNonPathContents, QIODevice::Append);
 }
