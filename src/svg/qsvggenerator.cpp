@@ -147,11 +147,14 @@ public:
     size_t    currentGHash;        // The hash of the current group start element tag, for comparisons
     std::unordered_map<QString, int> clipPathToId;  // Mapping of clipPath as stored in currentClipString to its clip ID
 
-    // Stores all path data in the currently open group, iff path merging is taking place, as just the path data attribute
+    // Stores all path data in the currently open attribute group, iff path merging is taking place, as just the path data attribute
     QString currentPathContents;
 
-    // Stores everything in the currently open group *except* mergeable paths, as full tags
+    // Stores everything in the currently open attribute group *except* mergeable paths, as full tags
     QString currentNonPathContents;
+
+    // Stores everything in the currently open *clipping* group, as concatenated attribute groups
+    QString currentClipGroupContents;
 
     QBrush brush;
     QPen pen;
@@ -188,13 +191,13 @@ public:
                 currentPathContents.size());   //  group has paths that need outputting)
     }
 
-    void outputCurrentAttrGroup(const QPen& gpen) {
+    void outputCurrentAttrGroup(const QPen& gpen, bool withinClip) {
         if (!currentGHasContents()) {
             return;
         }
 
-        // output the current group to the main svg body
-        stream->setString(&body, QIODevice::Append);
+        // output the current group to the main svg body or clip group
+        stream->setString(withinClip ? &currentClipGroupContents : &body, QIODevice::Append);
         *stream << currentGroupTag;
 
         // stream main group contents
@@ -209,38 +212,42 @@ public:
             currentPathContents.clear();
         }
 
-        *stream << "</g>\n";  // Close the group
+        *stream << QStringLiteral("\n</g>\n");  // Close the group
         stream->setString(&currentNonPathContents, QIODevice::Append);
     }
 
-    void outputCurrentClipGroup(const QString& clipString, const QString &clipName, const int clipID, const QPen& gpen) {
-        if (!currentGHasContents()) {
+    void outputCurrentClipGroup(const QString& clipString, const int clipID, const QPen& gpen) {
+        if (!currentGHasContents() && !currentClipGroupContents.size()) {
             return;
         }
 
         // Save the group's clipping if it exists, since it is now being used by a saved g tag
-        const auto hasClipName = !clipName.isEmpty();
-        if (!savedClipIDs.contains(clipID) && !clipString.isEmpty() && hasClipName) {
+        const auto hasClip = clipID != -1;
+        if (!savedClipIDs.contains(clipID) && !clipString.isEmpty() && hasClip) {
             stream->setString(&defs, QIODevice::Append);
             *stream << clipString;
             savedClipIDs += clipID;
         }
 
-        // enclose in clip tag
-        if (hasClipName) {
-            // output the current clip group contents to the main svg body
+        // Enclose in clip tag if required
+        if (clipID != -1) {
+            // Output attribute group contents to clip group content if required
+            outputCurrentAttrGroup(gpen, true);
+
+            // Output the current clip group contents to the main svg body
             stream->setString(&body, QIODevice::Append);
-            *stream << QString(QStringLiteral("<g clip-path=\"url(#%1)\">")).arg(clipName);
+            *stream << QStringLiteral("<g clip-path=\"url(#clip")
+                << QString::number(clipID)
+                << QStringLiteral(")\">\n")
+                << currentClipGroupContents
+                << QStringLiteral("\n</g>\n");
+        }
+        else {
+            // Just output the current attribute group
+            outputCurrentAttrGroup(gpen, false);
         }
 
-        outputCurrentAttrGroup(gpen);
-
-        // close clip tag
-        if (hasClipName) {
-            stream->setString(&body, QIODevice::Append);
-            *stream << QStringLiteral("</g>");
-        }
-
+        currentClipGroupContents.clear();
         stream->setString(&currentNonPathContents, QIODevice::Append);
     }
 
@@ -249,7 +256,6 @@ public:
     bool isClippingEffective() const {
         return clipEnabled && clipPath.has_value() && !clipPath->isEmpty();
     }
-    QString currentClipPathName;
     int numClipPaths = 0;
 };
 
@@ -651,7 +657,6 @@ public:
 
         // We will always overwrite or blank these
         d->currentClipID = -1;
-        d->currentClipPathName.clear();
         d->currentClipString.clear();
 
         if (clipPath.isEmpty() || !d->clipEnabled) {
@@ -665,11 +670,10 @@ public:
             d->clipPathToId[pathElement] = d->numClipPaths++;  // Create a new clip ID for this path
         }
         d->currentClipID = d->clipPathToId[pathElement];
-        d->currentClipPathName = QString(QStringLiteral("clip%1")).arg(d->currentClipID);
 
         bool clipPathNotSaved = clipPathIsNew || !d->savedClipIDs.contains(d->currentClipID);
         if (clipPathNotSaved) {  // Either a never-seen clip, or a clip that was chucked when the g state was discarded
-            d->currentClipString = QString(QStringLiteral("<clipPath id=\"%1\">\n\t%2</clipPath>\n")).arg(d->currentClipPathName, pathElement);
+            d->currentClipString = QString(QStringLiteral("<clipPath id=\"clip%1\">\n\t%2</clipPath>\n")).arg(d->currentClipID, pathElement);
         }
     }
 };
@@ -1101,7 +1105,7 @@ bool QSvgPaintEngine::end()
     Q_D(QSvgPaintEngine);
 
     // complete the body
-    d->outputCurrentClipGroup(d->currentClipString, d->currentClipPathName, d->currentClipID, d->pen);
+    d->outputCurrentClipGroup(d->currentClipString, d->currentClipID, d->pen);
 
     // close the defs
     d->stream->setString(&d->defs);
@@ -1196,7 +1200,6 @@ void QSvgPaintEngine::updateState(const QPaintEngineState &state)
     // Save some parts of the current state which can be changed while calculating the new one
     bool pathsWereMerged = d->mergePaths;
     QString clipString = d->currentClipString;
-    QString clipName = d->currentClipPathName;
     int clipID = d->currentClipID;
     QPen gpen = d->pen;
 
@@ -1233,12 +1236,12 @@ void QSvgPaintEngine::updateState(const QPaintEngineState &state)
     // 2.b -> (i) to (iii), clipping has changed, see if current group has contents and clipping that need saving
     // And also 2.a, 2.b -> (iv), clear the previous group data
     if (clipChanged) {
-        d->outputCurrentClipGroup(clipString, clipName, clipID, gpen);
+        d->outputCurrentClipGroup(clipString, clipID, gpen);
     }
     // 3.b -> (i), state has changed, see if current group has contents and attributes that need saving
     // And also 3.a, 3.b -> (iv), clear the previous group data
     else if (stateChanged) {
-        d->outputCurrentAttrGroup(gpen);     
+        d->outputCurrentAttrGroup(gpen, clipID != -1);     
     }
     // (else: 3. state has not changed)
 
