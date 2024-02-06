@@ -1274,7 +1274,7 @@ void QSvgPaintEngine::updateClipState(const QPaintEngineState &state)
             break;
         case Qt::ReplaceClip:
         case Qt::IntersectClip:
-            d->clipPath = painter()->transform().map(painter()->clipPath());
+            d->clipPath = painter()->transform().map(painter()->clipPathF());
             break;
         }
     }
