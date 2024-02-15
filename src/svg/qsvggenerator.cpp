@@ -212,7 +212,7 @@ public:
             currentPathContents.clear();
         }
 
-        *stream << QStringLiteral("\n</g>\n");  // Close the group
+        *stream << QStringLiteral("</g>\n");  // Close the group
         stream->setString(&currentNonPathContents, QIODevice::Append);
     }
 
@@ -240,7 +240,7 @@ public:
                 << QString::number(clipID)
                 << QStringLiteral(")\">\n")
                 << currentClipGroupContents
-                << QStringLiteral("\n</g>\n");
+                << QStringLiteral("</g>\n");
         }
         else {
             // Just output the current attribute group
@@ -647,8 +647,7 @@ public:
         *d->stream << "font-family=\"" << d->attributes.font_family << "\" "
                       "font-size=\"" << d->attributes.font_size << "\" "
                       "font-weight=\"" << d->attributes.font_weight << "\" "
-                      "font-style=\"" << d->attributes.font_style << "\" "
-                   << Qt::endl;
+                      "font-style=\"" << d->attributes.font_style << "\" ";
     }
 
     // Set the current clipPath element for the defs containing the given path, and the currentClipID
@@ -1217,8 +1216,7 @@ void QSvgPaintEngine::updateState(const QPaintEngineState &state)
                << d->matrix.m12() << ','
                << d->matrix.m21() << ',' << d->matrix.m22() << ','
                << d->matrix.dx() << ',' << d->matrix.dy()
-               << ")\""
-               << Qt::endl;
+               << ")\" ";
 
     qfontToSvg(state.font());
 
