@@ -650,19 +650,19 @@ public:
                       "font-style=\"" << d->attributes.font_style << "\" ";
     }
 
-    // Set the current clipPath element for the defs containing the given path, and the currentClipID
-    void clipPathToSvg(const QPainterPath& clipPath) {
+    // Sets the clipPath element for the defs containing the current clipPath, and sets the currentClipID
+    void clipPathToSvg() {
         Q_D(QSvgPaintEngine);
 
         // We will always overwrite or blank these
         d->currentClipID = -1;
         d->currentClipString.clear();
 
-        if (clipPath.isEmpty() || !d->clipEnabled) {
+        if (!d->isClippingEffective()) {
             return;  // Nothing to do
         }
 
-        QString pathElement = pathDataToSvg(qPainterPathToPathData(clipPath), clipPath.fillRule(), d->pen);
+        QString pathElement = pathDataToSvg(qPainterPathToPathData(*d->clipPath), d->clipPath->fillRule(), d->pen);
 
         bool clipPathIsNew = 0 == d->clipPathToId.count(pathElement);
         if (clipPathIsNew) {
@@ -1197,7 +1197,6 @@ void QSvgPaintEngine::updateState(const QPaintEngineState &state)
     // always stream full gstate since we don't nest g tags - but only if it has changed
 
     // Save some parts of the current state which can be changed while calculating the new one
-    bool pathsWereMerged = d->mergePaths;
     QString clipString = d->currentClipString;
     int clipID = d->currentClipID;
     QPen gpen = d->pen;
@@ -1263,8 +1262,10 @@ void QSvgPaintEngine::updateClipState(const QPaintEngineState &state)
 
     const QPaintEngine::DirtyFlags flags = state.state();
 
-    const bool clippingChanged = flags.testAnyFlags(DirtyClipPath | DirtyClipRegion);
-    if (clippingChanged) {
+    if (flags & DirtyClipEnabled)
+        d->clipEnabled = state.isClipEnabled();
+
+    if (flags.testAnyFlags(DirtyClipPath | DirtyClipRegion)) {
         switch (state.clipOperation()) {
         case Qt::NoClip:
             d->clipEnabled = false;
@@ -1277,10 +1278,7 @@ void QSvgPaintEngine::updateClipState(const QPaintEngineState &state)
         }
     }
 
-    if (flags & DirtyClipEnabled)
-        d->clipEnabled = state.isClipEnabled();
-
-    clipPathToSvg(*d->clipPath);  // Update svg clip state, may just clear it
+    clipPathToSvg();  // Update svg clip state (may just clear it)
 }
 
 void QSvgPaintEngine::drawEllipse(const QRectF &r)
