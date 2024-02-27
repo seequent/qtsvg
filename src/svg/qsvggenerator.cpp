@@ -230,7 +230,7 @@ public:
         }
 
         // Enclose in clip tag if required
-        if (clipID != -1) {
+        if (hasClip) {
             // Output attribute group contents to clip group content if required
             outputCurrentAttrGroup(gpen, true);
 
@@ -1280,9 +1280,7 @@ void QSvgPaintEngine::updateClipState(const QPaintEngineState &state)
     if (flags & DirtyClipEnabled)
         d->clipEnabled = state.isClipEnabled();
 
-    if (clippingChanged) {
-        clipPathToSvg(*d->clipPath);
-    }
+    clipPathToSvg(*d->clipPath);  // Update svg clip state, may just clear it
 }
 
 void QSvgPaintEngine::drawEllipse(const QRectF &r)
