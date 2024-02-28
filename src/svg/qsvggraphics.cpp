@@ -314,6 +314,11 @@ bool QSvgText::precheck(QPainter *p) const
 {
     qsizetype numChars = 0;
     qreal originalFontSize = p->font().pointSizeF();
+    if (originalFontSize == qreal(-1)) {
+        // Painter font size was set in pixels, abandon check
+        return true;
+    }
+
     qreal maxFontSize = originalFontSize;
     for (const QSvgTspan *span : std::as_const(m_tspans)) {
         numChars += span->text().size();
