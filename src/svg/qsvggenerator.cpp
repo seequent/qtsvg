@@ -259,9 +259,7 @@ public:
     bool isClippingEffective() const {
         return clipEnabled && clipPath.has_value() && !clipPath->isEmpty();
     }
-    QString currentClipPathName;
     int numClipPaths = 0;
-    bool hasEmittedClipGroup = false;
 };
 
 static inline QPaintEngine::PaintEngineFeatures svgEngineFeatures()
@@ -558,7 +556,7 @@ public:
             break;
         }
 
-        if (spen.widthF() == 0)
+        if (spen.widthF() == qreal(0))
             stream() <<"stroke-width=\"1\" ";
         else
             stream() <<"stroke-width=\"" << spen.widthF() << "\" ";
@@ -1267,7 +1265,7 @@ void QSvgPaintEngine::updateState(const QPaintEngineState &state)
                << d->matrix.m12() << ','
                << d->matrix.m21() << ',' << d->matrix.m22() << ','
                << d->matrix.dx() << ',' << d->matrix.dy()
-               << ")\"";
+               << ")\" ";
 
     qfontToSvg(state.font());
 
